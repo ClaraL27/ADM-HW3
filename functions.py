@@ -153,7 +153,7 @@ def get_rank(soup):
     rank = soup.find('span', class_='numbers ranked')
     try:
         return int(re.findall(r'\d+', rank.text)[0])
-    except ValueError:
+    except IndexError:
         return ''
 
 
@@ -162,7 +162,7 @@ def get_pop(soup):
     pop = soup.find('span', class_='numbers popularity')
     try:
         return int(re.findall(r'\d+', pop.text)[0])
-    except ValueError:
+    except IndexError:
         return ''
 
 
