@@ -77,17 +77,15 @@ def get_num_ep(soup):
 
 
 # 4. Release and End Dates of anime, datetime format
-# prova regex
 def get_dates(soup):
     date = soup.find_all('div', class_='spaceit_pad')
-    status = 0
     for tag in date:
         date_info = tag.text.split()
         if date_info[0] == "Aired:":
-            if "Not Available" in " ".join(date_info[1:]):
+            only_date = date_info[1:]
+            if "Not available" in " ".join(only_date) or "Not Available" in " ".join(only_date):
                 return ['', '']
             data = []
-            only_date = date_info[1:]
             for string in only_date:
                 prova = re.findall(r'[a-zA-Z]{0,3}[0-9]{0,2}[0-9]{0,4}', string)
                 data.append(prova[0])
