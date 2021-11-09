@@ -4,7 +4,12 @@ import requests
 import os
 import re
 from datetime import datetime
+import nltk
+from nltk.stem import PorterStemmer
+import csv
+import json
 
+# 1 DATA COLLECTION
 # 1.1
 def get_link(url_link, file_txt):
     anime = []
@@ -244,4 +249,70 @@ def get_staff(soup):
         final_staff.append([i, j])
 
     return final_staff
+
+# 2 SEARCH ENGINE
+
+def download():
+    nltk.download('punkt')
+    nltk.download('stopwords')
+
+
+# function to stem the string given
+def text_mining(string):
+    # gather all the stopwords
+    stop_words = set(nltk.corpus.stopwords.words('english'))
+    # tokenization
+    tokens = nltk.word_tokenize(string.lower())
+    # remove punctuations and numbers and then word stemming
+    res_tok = [PorterStemmer().stem(word) for word in tokens if word.isalpha() and word not in stop_words]
+    return res_tok
+
+
+# function to create the vocabulary
+def create_vocab():
+    vocabulary = dict()
+    for i in tqdm(range(1, 384)):
+        path = f'pages_tsv/page_{i}/'
+        for file in os.listdir(path):
+            tsv_file = open(path+file, 'r', encoding='utf-8')
+            anime = csv.DictReader(tsv_file, delimiter='\t')
+            descr = anime.__next__()['animeDescription']
+
+            for word in text_mining(descr):
+                if word not in vocabulary.keys():
+                    vocabulary[word] = len(vocabulary)
+
+    file_voc = open("vocabulary.json", "w", encoding='utf-8')
+    json.dump(vocabulary, file_voc, ensure_ascii=False)
+    file_voc.close()
+
+
+# function to create the inverted_index
+def invertedIndex():
+
+    inverted_index = dict()
+
+    voc_json = open('vocabulary.json', 'r', encoding='utf-8')
+    vocabulary = json.load(voc_json)
+
+    # creating an empty inverted_index dictionary
+    for word in vocabulary:
+        inverted_index[vocabulary[word]] = []
+
+    for i in tqdm(range(1, 384)):
+        path = f'pages_tsv/page_{i}/'
+
+        for file in os.listdir(path):
+            tsv_file = open(path+file, 'r', encoding='utf-8')
+            document_id = 'document_' + (''.join(re.findall(r'\d+', file)))
+            anime = csv.DictReader(tsv_file, delimiter='\t')
+            descr = anime.__next__()['animeDescription']
+
+            for word in text_mining(descr):
+                if document_id not in inverted_index[vocabulary[word]]:
+                    inverted_index[vocabulary[word]].append(document_id)
+
+    file_inv_ind = open("inverted_index.json", "w", encoding='utf-8')
+    json.dump(vocabulary, file_inv_ind, ensure_ascii=False)
+    file_inv_ind.close()
 
