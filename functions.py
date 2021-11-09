@@ -313,6 +313,6 @@ def invertedIndex():
                     inverted_index[vocabulary[word]].append(document_id)
 
     file_inv_ind = open("inverted_index.json", "w", encoding='utf-8')
-    json.dump(vocabulary, file_inv_ind, ensure_ascii=False)
+    json.dump(inverted_index, file_inv_ind, ensure_ascii=False)
     file_inv_ind.close()
 
