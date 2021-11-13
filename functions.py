@@ -8,9 +8,12 @@ import nltk
 from nltk.stem import PorterStemmer
 import csv
 import json
+import pandas as pd
+import numpy as np
+import heapq
 
 # 1 DATA COLLECTION
-# 1.1
+# 1.1 Get the list of animes
 def get_link(url_link, file_txt):
     anime = []
     for page in tqdm(range(0, 400)):
@@ -27,7 +30,7 @@ def get_link(url_link, file_txt):
             f.write(link_l + str('\n'))
 
 
-# 1.2
+# 1.2 Crawl animes
 def crawl_html(start_index, stop_index=0):
     with open('anime_links.txt', 'r', encoding='utf-8') as f:
         urls = f.read().splitlines()[start_index:]
@@ -53,7 +56,7 @@ def crawl_html(start_index, stop_index=0):
                 f.write(anime_page.text)
 
 
-# 1.3
+# 1.3 Parse downloaded pages
 # 1. Anime Name, String
 def get_title(soup):
     title = soup.find('meta', {'property': 'og:title'})
@@ -250,8 +253,9 @@ def get_staff(soup):
 
     return final_staff
 
-# 2 SEARCH ENGINE
 
+# 2 SEARCH ENGINE
+# 2.1 Conjunctive query
 def download():
     nltk.download('punkt')
     nltk.download('stopwords')
@@ -269,6 +273,8 @@ def text_mining(string):
 
 
 # function to create the vocabulary
+# key -> term (string)
+# value -> term_id (integer)
 def create_vocab():
     vocabulary = dict()
     for i in tqdm(range(1, 384)):
@@ -286,8 +292,10 @@ def create_vocab():
     json.dump(vocabulary, file_voc, ensure_ascii=False)
     file_voc.close()
 
-
-# function to create the inverted_index
+# 2.1.1 Create your index!
+# function to create the inverted_index and stores it in a json file
+# key -> term_id
+# value -> list of documents which contain the term
 def invertedIndex():
 
     inverted_index = dict()
@@ -316,3 +324,105 @@ def invertedIndex():
     json.dump(inverted_index, file_inv_ind, ensure_ascii=False)
     file_inv_ind.close()
 
+
+# 2.2 Conjunctive query & Ranking score
+# 2.2.1 Inverted index tf*idf
+# function to create the inverted_index_tfidf and stores it in a json file
+# key -> term_id
+# value -> list of tuples of (document_id, tfidf_{term, document_id})
+def invertedIndex_tfidf(vocabulary, inverted_index):
+
+    inverted_index_tfidf = dict()
+    inverted_doc = dict()
+
+    n_doc = 0
+    for i in range(1, 384):
+        path = f'pages_tsv/page_{i}/'
+        n_doc += len(os.listdir(path))
+
+    # creating an empty inverted_index_tfidf dictionary
+    for word in vocabulary:
+        inverted_index_tfidf[vocabulary[word]] = []
+
+    for i in tqdm(range(1, 384)):
+        path = f'pages_tsv/page_{i}/'
+
+        for file in os.listdir(path):
+            tsv_file = open(path+file, 'r', encoding='utf-8')
+            document_id = 'document_' + (''.join(re.findall(r'\d+', file)))
+            anime = csv.DictReader(tsv_file, delimiter='\t')
+            descr = anime.__next__()['animeDescription']
+            descr = text_mining(descr)
+
+            # count how many word has the document
+            n_descr = len(descr)
+            inverted_doc[document_id] = 0
+            word_counted = []
+            for word in descr:
+                tf = descr.count(word) / n_descr
+                idf = np.log10(n_doc/len(inverted_index[str(vocabulary[word])]))
+                tfidf = tf * idf
+                inverted_doc[document_id] += np.square(tfidf)
+                if word not in word_counted:
+                    inverted_index_tfidf[vocabulary[word]].append((document_id, tfidf))
+                    word_counted.append(word)
+
+    file_inv_term = open("inverted_index_tfidf.json", "w", encoding='utf-8')
+    json.dump(inverted_index_tfidf, file_inv_term, ensure_ascii=False)
+    file_inv_term.close()
+
+    file_inv_doc = open("inverted_doc.json", "w", encoding='utf-8')
+    json.dump(inverted_doc, file_inv_doc, ensure_ascii=False)
+    file_inv_doc.close()
+
+
+# 2.2.2 Execute the query
+def top_k_documents(query, k, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary):
+    # we are taking the first k similar documents to the query using heapq
+    result, heap = search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary)
+    heap_k = heapq.nlargest(k, heap)
+    final_doc = dict()
+    for i in range(len(heap_k)):
+        pos = list(result.values()).index(heap_k[i])
+        final_doc[list(result)[pos]] = result[list(result)[pos]]
+    return final_doc, result
+
+
+def search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary):
+
+    # saving the inverted_index of the query
+    # creating index query dictionary
+    query_dict_2 = dict()
+    for word in query:
+        if word in vocabulary.keys():
+            query_dict_2[vocabulary[word]] = inverted_index[str(vocabulary[word])]
+
+    query_index_2 = list(query_dict_2.keys())
+
+    # searching for the documents requested from the query
+    doc_list_2 = set(query_dict_2[query_index_2[0]])
+
+    for query_word in query_index_2[1:]:
+        doc_list_2.intersection_update(query_dict_2[query_word])
+
+    # create the heap list in order to take the first k documents
+    heap = list()
+    heapq.heapify(heap)
+    result, numerator = dict(), dict()
+
+    #creating the numerator dictonary
+    for word in query:
+        if word in vocabulary.keys():
+            for elem in inverted_index_tfidf[str(vocabulary[word])]:
+                if elem[0] in doc_list_2:
+                    if elem[0] not in numerator:
+                        numerator[elem[0]] = elem[1]
+                    else:
+                        numerator[elem[0]] += elem[1]
+
+    for document in doc_list_2:
+        cos_sim = numerator[document]/(np.sqrt(inverted_doc[document]) * np.sqrt(len(query)))
+        result[document] = cos_sim
+        heapq.heappush(heap, cos_sim)
+
+    return result, heap
