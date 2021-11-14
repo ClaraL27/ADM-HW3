@@ -14,6 +14,8 @@ import heapq
 
 # 1 DATA COLLECTION
 # 1.1 Get the list of animes
+# we are using the get response request to "download" the page,
+# and then we use the library BeautifulSoup to get the urls needed.
 def get_link(url_link, file_txt):
     anime = []
     for page in tqdm(range(0, 400)):
@@ -39,13 +41,14 @@ def crawl_html(start_index, stop_index=0):
         else:
             stop_index = 19130
         for i, url in zip(tqdm(range(start_index, stop_index)), urls):
+            # headers contains every kind of user agent that could open the url page
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.35 Safari/537.36 QIHU 360SE'
             }
 
-            anime_page = requests.get(url, headers = headers)
+            anime_page = requests.get(url, headers=headers)
 
-            # if something bad happen
+            # in case something bad happen
             if anime_page.status_code != 200:
                 raise Exception(f"Something really bad happened. Current index is {i}")
 
@@ -57,6 +60,11 @@ def crawl_html(start_index, stop_index=0):
 
 
 # 1.3 Parse downloaded pages
+# to get the information, we checked the html pages to see
+# where the information was stored, and after that, we
+# use BeautifulSoup to get it!
+# sometimes we use a try, except because the information is
+# not present and it could return an exception error
 # 1. Anime Name, String
 def get_title(soup):
     title = soup.find('meta', {'property': 'og:title'})
@@ -91,10 +99,14 @@ def get_dates(soup):
         date_info = tag.text.split()
         if date_info[0] == "Aired:":
             only_date = date_info[1:]
+            # this condition is for the anime that do not have any Release or End Dates
             if "Not available" in " ".join(only_date) or "Not Available" in " ".join(only_date):
                 return ['', '']
             data = []
             for string in only_date:
+                # we use a regex function to get only the needed dates
+                # Months: 3 letters or 0, Day: 2 numbers or 0, Year: 4 numbers
+                # sometimes the end date is not in there
                 prova = re.findall(r'[a-zA-Z]{0,3}[0-9]{0,2}[0-9]{0,4}', string)
                 data.append(prova[0])
             data = list(filter(None, data))
@@ -102,6 +114,8 @@ def get_dates(soup):
             second_date_list = []
             first_date = ''
             second_date = ''
+            # if there is the end date, also there is a 'to' string
+            # to divide the release from the end date
             if 'to' in data:
                 ind = data.index('to')
                 first_date_list = data[:ind]
@@ -262,6 +276,8 @@ def download():
 
 
 # function to stem the string given
+# input: string of the text
+# output: list of every word stemmed in the query
 def text_mining(string):
     # gather all the stopwords
     stop_words = set(nltk.corpus.stopwords.words('english'))
@@ -294,7 +310,7 @@ def create_vocab():
 
 # 2.1.1 Create your index!
 # function to create the inverted_index and stores it in a json file
-# key -> term_id
+# key -> term_id (unique integer)
 # value -> list of documents which contain the term
 def invertedIndex():
 
@@ -328,7 +344,7 @@ def invertedIndex():
 # 2.2 Conjunctive query & Ranking score
 # 2.2.1 Inverted index tf*idf
 # function to create the inverted_index_tfidf and stores it in a json file
-# key -> term_id
+# key -> term_id (unique integer)
 # value -> list of tuples of (document_id, tfidf_{term, document_id})
 def invertedIndex_tfidf(vocabulary, inverted_index):
 
@@ -357,6 +373,7 @@ def invertedIndex_tfidf(vocabulary, inverted_index):
             # count how many word has the document
             n_descr = len(descr)
             inverted_doc[document_id] = 0
+            # to store the words already used
             word_counted = []
             for word in descr:
                 tf = descr.count(word) / n_descr
@@ -377,6 +394,11 @@ def invertedIndex_tfidf(vocabulary, inverted_index):
 
 
 # 2.2.2 Execute the query
+# output:
+# final_doc contains only the first k documents: key -> document_id
+#                                                value -> cos_sim
+# result: key -> document_id
+#         value -> cos_sim
 def top_k_documents(query, k, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary):
     # we are taking the first k similar documents to the query using heapq
     result, heap = search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary)
@@ -388,6 +410,8 @@ def top_k_documents(query, k, inverted_index, inverted_index_tfidf, inverted_doc
     return final_doc, result
 
 
+# this function calculates the cosine similarity between a document and a query
+# more explanation abaut it on the main notebook
 def search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary):
 
     # saving the inverted_index of the query
@@ -410,7 +434,7 @@ def search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc,
     heapq.heapify(heap)
     result, numerator = dict(), dict()
 
-    #creating the numerator dictonary
+    #creating the numerator dictionary
     for word in query:
         if word in vocabulary.keys():
             for elem in inverted_index_tfidf[str(vocabulary[word])]:
