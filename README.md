@@ -102,6 +102,7 @@ In this github repository we stored the files written for the third Homework of 
          # implementation function
          def MyAlg(seq,query);
 
+## the files below are only used to exchange data between us
 3. __`anime_links.txt`__:
 > contains the links of the animes
 
@@ -116,3 +117,9 @@ In this github repository we stored the files written for the third Homework of 
 
 7. __`inverted_doc.json`__:
 > contains the tfidf for every documents used for the cosine similarity
+
+8. __`score_dict.json`__:
+> contains the new documents for the new score
+
+9. __`heap.json`__:
+> contains a list unordered with only scores
