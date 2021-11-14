@@ -92,6 +92,15 @@ In this github repository we stored the files written for the third Homework of 
                # function to calculate the cosine similarity
                def search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary);
 
+      # 3. DEFINE A NEW SCORE!
+         # function to stem the string given
+         def text_mining_score(string);
+         # function to calculate the new score
+         def new_score(query);
+      
+      # 5. ALGORITHMIC QUESTION
+         # implementation function
+         def MyAlg(seq,query);
 
 3. __`anime_links.txt`__:
 > contains the links of the animes

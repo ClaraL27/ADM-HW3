@@ -11,6 +11,7 @@ import json
 import pandas as pd
 import numpy as np
 import heapq
+from dateutil import parser
 
 # 1 DATA COLLECTION
 # 1.1 Get the list of animes
@@ -394,14 +395,18 @@ def invertedIndex_tfidf(vocabulary, inverted_index):
 
 
 # 2.2.2 Execute the query
+# also used for the third exercise, Define a new score
 # output:
 # final_doc contains only the first k documents: key -> document_id
 #                                                value -> cos_sim
 # result: key -> document_id
 #         value -> cos_sim
-def top_k_documents(query, k, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary):
+def top_k_documents(k, query=None, inverted_index=None, inverted_index_tfidf=None, inverted_doc=None, vocabulary=None, heap=None, score_dict=None):
     # we are taking the first k similar documents to the query using heapq
-    result, heap = search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary)
+    if heap is None and score_dict is None:
+        result, heap = search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc, vocabulary)
+    else:
+        result = score_dict
     heap_k = heapq.nlargest(k, heap)
     final_doc = dict()
     for i in range(len(heap_k)):
@@ -450,3 +455,111 @@ def search_similarity(query, inverted_index, inverted_index_tfidf, inverted_doc,
         heapq.heappush(heap, cos_sim)
 
     return result, heap
+
+
+# 3. DEFINE A NEW SCORE
+# it's the same as text_mining(string), but this one does not have
+# the check of word.isalpha(), because we are using also information
+# with numbers in it
+def text_mining_score(string):
+    # gather all the stopwords
+    stop_words = set(nltk.corpus.stopwords.words('english'))
+    # tokenization
+    tokens = nltk.word_tokenize(string.lower())
+    # remove punctuations and numbers and then word stemming
+    res_tok = [PorterStemmer().stem(word) for word in tokens if  word not in stop_words]
+    return res_tok
+
+
+def new_score(query):
+
+    #formatting the query
+    query = text_mining_score(query)
+
+    score_dict = dict()
+    heap = list()
+    heapq.heapify(heap)
+
+    for i in tqdm(range(1, 384)):
+        path = f'pages_tsv/page_{i}/'
+
+        for file in os.listdir(path):
+            tsv_file = open(path+file, 'r', encoding='utf-8')
+            document_id = 'document_' + (''.join(re.findall(r'\d+', file)))
+            anime = csv.DictReader(tsv_file, delimiter='\t')
+            anime = anime.__next__()
+
+            #considering all the columns of the anime link
+            title = text_mining_score(anime['animeTitle'])
+            typ = text_mining_score(anime['animeType'])
+            num_episode = anime['animeNumEpisode']
+            releaseDate = anime['releaseDate']
+            endDate = anime['endDate']
+            animeNumMembers = anime['animeNumMembers']
+            animeScore = anime['animeScore']
+            animeUsers = anime['animeUsers']
+            animeRank = anime['animeRank']
+            animePopularity = anime['animePopularity']
+            descr = text_mining_score(anime['animeDescription'])
+            animeCharacters = anime['animeCharacters']
+            animeVoices = anime['animeVoices']
+            animeStaff = anime['animeStaff']
+
+            #initializing to 0 every score column
+            score_title, score_type, score_description, score_staff, score_characters, score_voice, score_releaseDate, score_endDate = 0, 0, 0, 0, 0, 0, 0, 0
+            score_episode, score_members, score_animeScore, score_users, score_rank, score_popularity = 0, 0, 0, 0, 0, 0
+
+            # define the score column for each document
+            for word in query:
+                if word.isnumeric():
+                    if word == num_episode:
+                        score_episode += 0.2
+                    if word == animeNumMembers:
+                        score_members += 0.05
+                    if word == animeUsers:
+                        score_users += 0.05
+                    if word == animeRank:
+                        score_rank += 0.2
+                    if word == animePopularity:
+                        score_popularity += 0.1
+                    if releaseDate!="" and word == str((parser.parse(releaseDate)).year):
+                        score_releaseDate += 0.5
+                    if endDate!="" and word == str((parser.parse(endDate)).year) :
+                        score_endDate += 0.5
+                else:
+                    score_title += (title.count(word)*2)/(len(title) + len(query))
+                    score_type += typ.count(word)/2
+                    score_description += (descr.count(word)*2)/(len(descr) + len(query))
+                    if word == animeScore:
+                        score_animeScore += 0.4
+                    for character in animeCharacters.split(","):
+                        character = character.replace("[","").replace("]", "").replace(" ' ", "").replace("'", "")
+                        character = text_mining_score(character)
+                        if character == word.split():
+                            score_characters += 0.5
+                    for voice in animeVoices.split(","):
+                        voice = voice.replace("[","").replace("]", "").replace(" ' ", "").replace("'", "")
+                        voice = text_mining_score(voice)
+                        if voice == word.split():
+                            score_voice += 0.5
+                    for member in animeStaff.split(","):
+                        member = member.replace("[","").replace("]", "").replace(" ' ", "").replace("'", "")
+                        member = text_mining_score(member)
+                        if member == word.split():
+                            score_staff += 0.5
+
+
+            score = score_title + score_type + score_episode + score_members + score_animeScore + score_users + score_rank + score_popularity + score_description + score_staff + score_characters + score_voice
+
+            #adding to the score_dict the corresponding score for every document
+            score_dict[document_id] = score
+            heapq.heappush(heap, score)
+
+    #saving in a json file the score_dict and the heap list
+    file_score_dict = open("score_dict.json", "w", encoding='utf-8')
+    json.dump(score_dict, file_score_dict, ensure_ascii=False)
+    file_score_dict.close()
+
+    file = open("heap.json", "w", encoding='utf-8')
+    json.dump(heap, file, ensure_ascii=False)
+    file.close()
